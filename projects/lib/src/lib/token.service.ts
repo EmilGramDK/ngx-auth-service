@@ -1,8 +1,8 @@
-import { inject, Injectable } from '@angular/core';
-import { AUTH_CONFIG, AuthServiceConfig } from './config';
+import { inject, Injectable } from "@angular/core";
+import { AUTH_CONFIG, AuthServiceConfig } from "./config";
 
 @Injectable({
-  providedIn: 'root',
+  providedIn: "root",
 })
 export class TokenService {
   public token?: string;
@@ -15,27 +15,17 @@ export class TokenService {
     this._checkToken();
   }
 
-  public async setToken(token: string): Promise<boolean> {
-    return new Promise<boolean>((resolve) => {
-      try {
-        localStorage.setItem(this.config.storageKey, token);
-        this.token = token;
-        this._decodeToken();
-        this._scheduleExpiration();
-        resolve(true);
-      } catch (error) {
-        resolve(false);
-      }
-    });
+  public getToken(): string | undefined {
+    return this.token;
   }
 
   public logout() {
     localStorage.removeItem(this.config.storageKey);
     window.location.href =
-      this.config.authURL + '/logout?nextCallback=' + window.location.href;
+      this.config.authURL + "/logout?nextCallback=" + window.location.href;
   }
 
-  public showPopup(type: 'expiry' | 'user', fixedTime: number = 0) {
+  public showPopup(type: "expiry" | "user", fixedTime: number = 0) {
     this._showPopup(type, fixedTime);
   }
 
@@ -61,23 +51,37 @@ export class TokenService {
     } catch (error) {
       return {
         timeUntilExpiry: { inMinutes: 0, inSeconds: 0 },
-        user: { user_no: '', database: '' },
+        user: { user_no: "", database: "" },
       };
     }
   }
 
+  private async _setToken(token: string): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      try {
+        localStorage.setItem(this.config.storageKey, token);
+        this.token = token;
+        this._decodeToken();
+        this._scheduleExpiration();
+        resolve(true);
+      } catch (error) {
+        resolve(false);
+      }
+    });
+  }
+
   private _checkToken() {
-    const token = new URLSearchParams(window.location.search).get('token');
+    const token = new URLSearchParams(window.location.search).get("token");
 
     if (token) {
-      this.setToken(token);
+      this._setToken(token);
       return;
     }
 
     this._getToken().then((token) => {
       if (!token || this._isTokenExpired(token)) {
         window.location.href =
-          this.config.authURL + '/login?nextCallback=' + window.location.href;
+          this.config.authURL + "/login?nextCallback=" + window.location.href;
       } else {
         this._scheduleExpiration();
       }
@@ -93,7 +97,7 @@ export class TokenService {
       } catch (error) {
         this.token = undefined;
         resolve(undefined);
-        console.error('Error getting token:', error);
+        console.error("Error getting token:", error);
       }
     });
   }
@@ -105,7 +109,7 @@ export class TokenService {
         const currentTime = Math.floor(Date.now() / 1000);
         const timeUntilExpiry = expirationDate - currentTime;
 
-        console.log('Token will expire in', timeUntilExpiry, 'seconds');
+        console.log("Token will expire in", timeUntilExpiry, "seconds");
 
         if (timeUntilExpiry > 0) {
           this._scheduleExpiryPopup(timeUntilExpiry);
@@ -113,7 +117,7 @@ export class TokenService {
         }
       }
     } catch (error) {
-      console.error('Error scheduling popup:', error);
+      console.error("Error scheduling popup:", error);
     }
   }
 
@@ -123,21 +127,21 @@ export class TokenService {
 
     if (timeUntilExpiry > tenMinutes) {
       setTimeout(() => {
-        this._showPopup('expiry', 10);
+        this._showPopup("expiry", 10);
       }, (timeUntilExpiry - tenMinutes) * 1000);
 
       setTimeout(() => {
-        this._showPopup('expiry', 5);
+        this._showPopup("expiry", 5);
       }, (timeUntilExpiry - fiveMinutes) * 1000);
     } else {
-      this._showPopup('expiry');
+      this._showPopup("expiry");
     }
   }
 
   private _scheduleRedirect(timeUntilExpiry: number) {
     setTimeout(() => {
       window.location.href =
-        this.config.authURL + '/login?nextCallback=' + window.location.href;
+        this.config.authURL + "/login?nextCallback=" + window.location.href;
     }, timeUntilExpiry * 1000);
   }
 
@@ -158,14 +162,14 @@ export class TokenService {
     }
   }
 
-  private _showPopup(type: 'expiry' | 'user', fixedTime: number = 0) {
-    const currentPopup = document.getElementById('popupService_overlay');
+  private _showPopup(type: "expiry" | "user", fixedTime: number = 0) {
+    const currentPopup = document.getElementById("popupService_overlay");
     if (currentPopup) {
       document.body.removeChild(currentPopup);
     }
 
-    const popup = document.createElement('div');
-    popup.id = 'popupService_overlay';
+    const popup = document.createElement("div");
+    popup.id = "popupService_overlay";
     popup.style.cssText = `
     position: fixed;
     top: 0;
@@ -179,7 +183,7 @@ export class TokenService {
     z-index: 50;
   `;
 
-    const modal = document.createElement('div');
+    const modal = document.createElement("div");
     modal.style.cssText = `
     background-color: #15202b;
     color: white;
@@ -193,20 +197,20 @@ export class TokenService {
     popup.appendChild(modal);
     document.body.appendChild(popup);
 
-    const closePopup = document.getElementById('tokenService_closePopup');
-    const renewSession = document.getElementById('tokenService_renewSession');
+    const closePopup = document.getElementById("tokenService_closePopup");
+    const renewSession = document.getElementById("tokenService_renewSession");
 
-    closePopup?.addEventListener('click', () => {
+    closePopup?.addEventListener("click", () => {
       document.body.removeChild(popup);
     });
 
-    renewSession?.addEventListener('click', () => {
+    renewSession?.addEventListener("click", () => {
       window.location.href =
-        this.config.authURL + '/login?nextCallback=' + window.location.href;
+        this.config.authURL + "/login?nextCallback=" + window.location.href;
     });
   }
 
-  private _getPopupHTML(type: 'expiry' | 'user', fixedTime: number = 0) {
+  private _getPopupHTML(type: "expiry" | "user", fixedTime: number = 0) {
     const tokenInfo = this.extractInfoFromToken();
     const minutes =
       fixedTime > 0 ? fixedTime : tokenInfo.timeUntilExpiry.inMinutes;
@@ -233,7 +237,7 @@ export class TokenService {
 
     const popupHTML = `
     <div style="font-size: 1.125rem; color: #cbd5e0;">
-      ${type === 'expiry' ? expiryMessage : userMessage}
+      ${type === "expiry" ? expiryMessage : userMessage}
     </div>
 
     <div style="display: flex; gap: 12px; margin-top: 24px; justify-content: center;">
@@ -251,7 +255,7 @@ export class TokenService {
   private _decodeJWT(token: string): any {
     try {
       // Split the JWT into its three parts
-      const [header, payload, signature] = token.split('.');
+      const [header, payload, signature] = token.split(".");
 
       // Decode the payload
       const decodedPayload = this._base64UrlDecode(payload);
@@ -259,18 +263,18 @@ export class TokenService {
       // Parse the JSON string
       return JSON.parse(decodedPayload);
     } catch (error) {
-      console.error('Error decoding JWT', error);
+      console.error("Error decoding JWT", error);
       return null;
     }
   }
 
   private _base64UrlDecode(base64Url: string): string {
     // Replace non-url-safe chars with base64 standard chars
-    base64Url = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    base64Url = base64Url.replace(/-/g, "+").replace(/_/g, "/");
 
     // Pad out with standard base64 required padding characters
     const pad =
-      base64Url.length % 4 === 0 ? '' : '='.repeat(4 - (base64Url.length % 4));
+      base64Url.length % 4 === 0 ? "" : "=".repeat(4 - (base64Url.length % 4));
     const base64 = base64Url + pad;
 
     // Decode base64 string
