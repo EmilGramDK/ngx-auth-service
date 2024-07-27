@@ -1,0 +1,30 @@
+{
+  "name": "@emilgramdk/auth-service",
+  "version": "1.0.0",
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/emilgramdk"
+  },
+  "description": "A simple authentication service for Angular applications.",
+  "author": "Emil Gram",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/emilgramdk/auth-service.git"
+  },
+  "homepage": "https://github.com/emilgramdk/auth-service",
+  "bugs": {
+    "url": "https://github.com/emilgramdk/auth-service/issues"
+  },
+  "peerDependencies": {
+    "@angular/common": "^18.0.0",
+    "@angular/core": "^18.0.0"
+  },
+  "dependencies": {
+    "tslib": "^2.5.0"
+  },
+  "sideEffects": false,
+  "devDependencies": {
+    "ng-packagr": "^18.1.0"
+  }
+}
