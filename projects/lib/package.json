@@ -10,7 +10,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/emilgramdk/auth-service.git"
+    "url": "git+https://github.com/emilgramdk/auth-service.git"
   },
   "homepage": "https://github.com/emilgramdk/auth-service",
   "bugs": {
@@ -23,8 +23,5 @@
   "dependencies": {
     "tslib": "^2.5.0"
   },
-  "sideEffects": false,
-  "devDependencies": {
-    "ng-packagr": "^18.1.0"
-  }
+  "sideEffects": false
 }
