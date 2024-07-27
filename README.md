@@ -1,27 +1,93 @@
-# MyWorkspace
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 18.1.2.
+# Auth Service Library for Angular
 
-## Development server
+## Overview
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
+The **Auth Service Library for Angular** is a streamlined and reusable authentication solution for Angular applications. Developed for internal use at our workplace, this library simplifies the process of integrating authentication into our Angular projects. By importing this library, developers can easily implement authentication features, ensuring consistency and reducing development time across multiple applications.
 
-## Code scaffolding
+## Features
 
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+- **Seamless Integration**: Easily integrate authentication into Angular applications by importing this library.
+- **Standardized Authentication**: Provides a consistent authentication flow across all projects.
+- **Configurable**: Allows customization for different authentication needs and use cases.
+- **Secure**: Implements best practices for secure authentication and user management.
 
-## Build
+## Installation
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
+To install the library, use the following npm command:
 
-## Running unit tests
+```bash
+npm install @emilgramdk/auth-service
+```
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+## Usage
 
-## Running end-to-end tests
+1. **Setup / Configuration**: Configure the library with your authentication settings.
+    ```typescript
+    import { ApplicationConfig } from '@angular/core';
+    import { AUTH_CONFIG, AuthServiceConfig } from '@emilgramdk/auth-service';
 
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
+    const authServiceConfig: AuthServiceConfig = {
+      authURL: 'https://example.com/auth',
+      storageKey: 'authToken',
+    };
 
-## Further help
+    export const appConfig: ApplicationConfig = {
+      providers: [
+        { provide: AUTH_CONFIG, useValue: authServiceConfig }
+      ],
+    };
+    ```
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+2. **Using the Service in a Component**: Inject the AuthService into your components.
+
+    ```typescript
+    import { AuthService } from '@emilgramdk/auth-service';
+
+    @Component({
+      selector: 'app-root',
+      templateUrl: './app.component.html'
+    })
+    export class AppComponent {
+
+      constructor(public authService: AuthService) {}
+
+      showUserInfo() {
+        this.authService.showPopup('user');
+      }
+    }
+    ```
+
+3. **Using the Service in API Service**: Inject the AuthService into your service.
+
+    ```typescript
+    import { AuthService } from '@emilgramdk/auth-service';
+
+    @Injectable({
+      providedIn: 'root',
+    })
+    export class APIService {
+      private apiURL = config.apiURL;
+    
+      constructor(private http: HttpClient, private tokenService: TokenService) {}
+    
+      private getURL(route: string): string {
+        return `${this.apiURL}${route}`;
+      }
+    
+      private async getHeaders(
+        contentType: string = 'application/json'
+      ): Promise<HttpHeaders> {
+        const token = this.tokenService.token; // get the token from the authService
+    
+        return new HttpHeaders({
+          Authorization: `Bearer ${token}`,
+          'Content-Type': contentType,
+        });
+      }
+    }
+    ```
+
+## License
+
+This project is licensed under the MIT License.
