@@ -1,10 +1,10 @@
 {
   "name": "@emilgramdk/ngx-auth-service",
-  "version": "1.0.2",
+  "version": "1.0.1",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "build": "ng build",
+    "build": "ng build && node addReadMe.js",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },

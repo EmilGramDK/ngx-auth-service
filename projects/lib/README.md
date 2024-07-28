@@ -76,7 +76,7 @@ npm install @emilgramdk/ngx-auth-service
 
      private async getHeaders(
        contentType: string = "application/json"
-     ): Promise<HttpHeaders> {
+     ): HttpHeaders {
        const token = this.authService.token; // get the token from the authService
 
        return new HttpHeaders({
