@@ -9,7 +9,6 @@ The **Auth Service Library for Angular** is a streamlined and reusable authentic
 - **Seamless Integration**: Easily integrate authentication into Angular applications by importing this library.
 - **Standardized Authentication**: Provides a consistent authentication flow across all projects.
 - **Configurable**: Allows customization for different authentication needs and use cases.
-- **Secure**: Implements best practices for secure authentication and user management.
 
 ## Installation
 
@@ -66,10 +65,7 @@ npm install @emilgramdk/auth-service
    export class APIService {
      private apiURL = config.apiURL;
 
-     constructor(
-       private http: HttpClient,
-       private tokenService: TokenService
-     ) {}
+     constructor(private http: HttpClient, private authService: AuthService) {}
 
      private getURL(route: string): string {
        return `${this.apiURL}${route}`;
@@ -78,7 +74,7 @@ npm install @emilgramdk/auth-service
      private async getHeaders(
        contentType: string = "application/json"
      ): Promise<HttpHeaders> {
-       const token = this.tokenService.token; // get the token from the authService
+       const token = this.authService.token; // get the token from the authService
 
        return new HttpHeaders({
          Authorization: `Bearer ${token}`,

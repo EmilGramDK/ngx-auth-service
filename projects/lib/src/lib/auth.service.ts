@@ -1,47 +1,66 @@
-import { inject, Injectable } from "@angular/core";
+import { Inject, Injectable } from "@angular/core";
 import { AUTH_CONFIG, AuthServiceConfig } from "./config";
 
 @Injectable({
   providedIn: "root",
 })
-export class TokenService {
+export class AuthService {
   public token?: string;
-  private decodedToken?: any;
-  private config: AuthServiceConfig;
+  public tokenInfo?: TokenInfo;
 
-  constructor() {
-    this.config = inject(AUTH_CONFIG);
-
+  // Constructor to initialize AuthService with configuration settings
+  constructor(@Inject(AUTH_CONFIG) private config: AuthServiceConfig) {
     this._checkToken();
   }
 
+  /**
+   * Retrieves the stored token, if available.
+   * @returns The current authentication token or undefined if not set.
+   */
   public getToken(): string | undefined {
     return this.token;
   }
 
+  /**
+   * Retrieves the token information, if available.
+   * @returns An object containing time until token expiry and user information.
+   */
+  public getTokenInfo(): TokenInfo | undefined {
+    return this.tokenInfo;
+  }
+
+  /**
+   * Logs the user out by removing the token and redirecting to the logout URL.
+   */
   public logout() {
     localStorage.removeItem(this.config.storageKey);
     window.location.href =
       this.config.authURL + "/logout?nextCallback=" + window.location.href;
   }
 
+  /**
+   * Displays a popup to the user for different purposes like token expiry or user info.
+   * @param type - The type of popup, either 'expiry' or 'user'.
+   * @param fixedTime - Optional time in minutes for token expiry warning.
+   */
   public showPopup(type: "expiry" | "user", fixedTime: number = 0) {
     this._showPopup(type, fixedTime);
   }
 
-  public extractInfoFromToken(): {
-    timeUntilExpiry: { inMinutes: number; inSeconds: number };
-    user: { user_no: string; database: string };
-  } {
+  /**
+   * Extracts user information and token expiration details from the decoded token.
+   * @returns An object containing time until token expiry and user information.
+   */
+  private _extractInfoFromToken() {
     try {
-      const decodedToken = this.decodedToken!;
+      const decodedToken = this._decodeJWT(this.token!);
 
       const expirationDate = decodedToken.exp;
       const currentTime = Math.floor(Date.now() / 1000);
       const secondsUntilExpiry = expirationDate - currentTime;
       const minutes = Math.floor(secondsUntilExpiry / 60);
 
-      return {
+      this.tokenInfo = {
         timeUntilExpiry: { inMinutes: minutes, inSeconds: secondsUntilExpiry },
         user: {
           user_no: decodedToken.username,
@@ -49,27 +68,33 @@ export class TokenService {
         },
       };
     } catch (error) {
-      return {
-        timeUntilExpiry: { inMinutes: 0, inSeconds: 0 },
-        user: { user_no: "", database: "" },
-      };
+      console.error("Error extracting token info:", error);
+      throw new Error("Error extracting token info");
     }
   }
 
-  private async _setToken(token: string): Promise<boolean> {
-    return new Promise<boolean>((resolve) => {
-      try {
-        localStorage.setItem(this.config.storageKey, token);
-        this.token = token;
-        this._decodeToken();
-        this._scheduleExpiration();
-        resolve(true);
-      } catch (error) {
-        resolve(false);
-      }
-    });
+  /**
+   * Sets the token in local storage and updates the internal state.
+   * @param token - The new authentication token.
+   * @returns True if the token was successfully set, otherwise false.
+   */
+  private _setToken(token: string): boolean {
+    try {
+      localStorage.setItem(this.config.storageKey, token);
+      this.token = token;
+      this._extractInfoFromToken();
+      this._scheduleExpiration();
+      return true;
+    } catch (error) {
+      console.error("Error setting token:", error);
+      return false;
+    }
   }
 
+  /**
+   * Checks for a token in the URL or local storage and validates it.
+   * If the token is invalid or not found, redirects to the login page.
+   */
   private _checkToken() {
     const token = new URLSearchParams(window.location.search).get("token");
 
@@ -88,11 +113,16 @@ export class TokenService {
     });
   }
 
+  /**
+   * Retrieves the token from local storage.
+   * @returns A promise that resolves with the stored token or undefined if not found.
+   */
   private async _getToken(): Promise<string | undefined> {
     return new Promise<string | undefined>((resolve) => {
       try {
         const token = localStorage.getItem(this.config.storageKey);
         this.token = token as string;
+        this._extractInfoFromToken();
         resolve(this.token);
       } catch (error) {
         this.token = undefined;
@@ -102,18 +132,21 @@ export class TokenService {
     });
   }
 
+  /**
+   * Schedules actions based on the token's expiration time, such as displaying popups or redirecting.
+   */
   private _scheduleExpiration() {
     try {
-      if (this.token) {
-        const expirationDate = this.decodedToken!.exp;
-        const currentTime = Math.floor(Date.now() / 1000);
-        const timeUntilExpiry = expirationDate - currentTime;
+      if (this.tokenInfo) {
+        console.log(
+          "Token will expire in",
+          this.tokenInfo.timeUntilExpiry.inMinutes,
+          "minutes."
+        );
 
-        console.log("Token will expire in", timeUntilExpiry, "seconds");
-
-        if (timeUntilExpiry > 0) {
-          this._scheduleExpiryPopup(timeUntilExpiry);
-          this._scheduleRedirect(timeUntilExpiry);
+        if (this.tokenInfo.timeUntilExpiry.inSeconds > 0) {
+          this._scheduleExpiryPopup(this.tokenInfo.timeUntilExpiry.inSeconds);
+          this._scheduleRedirect(this.tokenInfo.timeUntilExpiry.inSeconds);
         }
       }
     } catch (error) {
@@ -121,23 +154,35 @@ export class TokenService {
     }
   }
 
+  /**
+   * Schedules a popup to notify the user before the token expires.
+   * @param timeUntilExpiry - Time in seconds until the token expires.
+   */
   private _scheduleExpiryPopup(timeUntilExpiry: number) {
     const tenMinutes = 10 * 60;
     const fiveMinutes = 5 * 60;
 
     if (timeUntilExpiry > tenMinutes) {
-      setTimeout(() => {
-        this._showPopup("expiry", 10);
-      }, (timeUntilExpiry - tenMinutes) * 1000);
+      if (this.config.showRenewBeforeTenMin) {
+        setTimeout(() => {
+          this._showPopup("expiry", 10);
+        }, (timeUntilExpiry - tenMinutes) * 1000);
+      }
 
-      setTimeout(() => {
-        this._showPopup("expiry", 5);
-      }, (timeUntilExpiry - fiveMinutes) * 1000);
+      if (this.config.showRenewBeforeFiveMin) {
+        setTimeout(() => {
+          this._showPopup("expiry", 5);
+        }, (timeUntilExpiry - fiveMinutes) * 1000);
+      }
     } else {
       this._showPopup("expiry");
     }
   }
 
+  /**
+   * Schedules a redirect to the login page after the token expires.
+   * @param timeUntilExpiry - Time in seconds until the token expires.
+   */
   private _scheduleRedirect(timeUntilExpiry: number) {
     setTimeout(() => {
       window.location.href =
@@ -145,23 +190,27 @@ export class TokenService {
     }, timeUntilExpiry * 1000);
   }
 
-  private _decodeToken() {
-    if (this.token) {
-      this.decodedToken = this._decodeJWT(this.token);
-    }
-  }
-
+  /**
+   * Checks if the token has expired.
+   * @param token - The JWT token to check.
+   * @returns True if the token is expired, otherwise false.
+   */
   private _isTokenExpired(token: string): boolean {
     try {
-      this._decodeToken();
-      const expirationDate = this.decodedToken!.exp * 1000;
-      const currentTime = Date.now();
-      return expirationDate < currentTime;
+      if (this.tokenInfo!.timeUntilExpiry.inSeconds <= 0) {
+        return true;
+      }
+      return false;
     } catch (error) {
       return true;
     }
   }
 
+  /**
+   * Displays a popup message with specified information.
+   * @param type - The type of popup, either 'expiry' or 'user'.
+   * @param fixedTime - Optional fixed time for display.
+   */
   private _showPopup(type: "expiry" | "user", fixedTime: number = 0) {
     const currentPopup = document.getElementById("popupService_overlay");
     if (currentPopup) {
@@ -197,8 +246,8 @@ export class TokenService {
     popup.appendChild(modal);
     document.body.appendChild(popup);
 
-    const closePopup = document.getElementById("tokenService_closePopup");
-    const renewSession = document.getElementById("tokenService_renewSession");
+    const closePopup = document.getElementById("authService_closePopup");
+    const renewSession = document.getElementById("authService_renewSession");
 
     closePopup?.addEventListener("click", () => {
       document.body.removeChild(popup);
@@ -210,8 +259,14 @@ export class TokenService {
     });
   }
 
+  /**
+   * Generates the HTML content for the popup based on the type and timing.
+   * @param type - The type of popup, either 'expiry' or 'user'.
+   * @param fixedTime - Optional fixed time for display.
+   * @returns The HTML string for the popup content.
+   */
   private _getPopupHTML(type: "expiry" | "user", fixedTime: number = 0) {
-    const tokenInfo = this.extractInfoFromToken();
+    const tokenInfo = this.tokenInfo!;
     const minutes =
       fixedTime > 0 ? fixedTime : tokenInfo.timeUntilExpiry.inMinutes;
 
@@ -241,10 +296,10 @@ export class TokenService {
     </div>
 
     <div style="display: flex; gap: 12px; margin-top: 24px; justify-content: center;">
-      <button style="background-color: #22303c; color: white; padding: 8px 16px; border-radius: 8px; font-size: 0.875rem; font-weight: bold; border: none; cursor: pointer;" id="tokenService_closePopup">
+      <button style="background-color: #22303c; color: white; padding: 8px 16px; border-radius: 8px; font-size: 0.875rem; font-weight: bold; border: none; cursor: pointer;" id="authService_closePopup">
         CLOSE
       </button>
-      <button style="background-color: #111827; color: white; padding: 8px 16px; border-radius: 8px; font-size: 0.875rem; font-weight: bold; border: none; cursor: pointer;" id="tokenService_renewSession">
+      <button style="background-color: #111827; color: white; padding: 8px 16px; border-radius: 8px; font-size: 0.875rem; font-weight: bold; border: none; cursor: pointer;" id="authService_renewSession">
         RENEW SESSION
       </button>
     </div>
@@ -252,6 +307,11 @@ export class TokenService {
     return popupHTML;
   }
 
+  /**
+   * Decodes a JWT token string to extract its payload.
+   * @param token - The JWT token string.
+   * @returns The decoded payload as an object.
+   */
   private _decodeJWT(token: string): any {
     try {
       // Split the JWT into its three parts
@@ -268,6 +328,11 @@ export class TokenService {
     }
   }
 
+  /**
+   * Decodes a base64 URL encoded string.
+   * @param base64Url - The base64 URL encoded string.
+   * @returns The decoded string.
+   */
   private _base64UrlDecode(base64Url: string): string {
     // Replace non-url-safe chars with base64 standard chars
     base64Url = base64Url.replace(/-/g, "+").replace(/_/g, "/");
@@ -280,4 +345,9 @@ export class TokenService {
     // Decode base64 string
     return atob(base64);
   }
+}
+
+export interface TokenInfo {
+  timeUntilExpiry: { inMinutes: number; inSeconds: number };
+  user: { user_no: string; database: string };
 }
