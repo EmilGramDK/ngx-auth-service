@@ -11,8 +11,8 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "paths": {
-      "@emilgramdk/auth-service": ["./dist/lib"],
-      "@emilgramdk/auth-service/*": ["./dist/lib/*"]
+      "@emilgramdk/ngx-auth-service": ["./dist/lib"],
+      "@emilgramdk/ngx-auth-service/*": ["./dist/lib/*"]
     },
     "esModuleInterop": true,
     "sourceMap": true,

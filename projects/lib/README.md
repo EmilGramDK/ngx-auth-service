@@ -15,7 +15,7 @@ The **Auth Service Library for Angular** is a streamlined and reusable authentic
 To install the library, use the following npm command:
 
 ```bash
-npm install @emilgramdk/auth-service
+npm install @emilgramdk/ngx-auth-service
 ```
 
 ## Usage
@@ -24,7 +24,10 @@ npm install @emilgramdk/auth-service
 
    ```typescript
    import { ApplicationConfig } from "@angular/core";
-   import { AUTH_CONFIG, AuthServiceConfig } from "@emilgramdk/auth-service";
+   import {
+     AUTH_CONFIG,
+     AuthServiceConfig,
+   } from "@emilgramdk/ngx-auth-service";
 
    const authServiceConfig: AuthServiceConfig = {
      authURL: "https://example.com/auth",
@@ -39,7 +42,7 @@ npm install @emilgramdk/auth-service
 2. **Using the Service in a Component**: Inject the AuthService into your components.
 
    ```typescript
-   import { AuthService } from "@emilgramdk/auth-service";
+   import { AuthService } from "@emilgramdk/ngx-auth-service";
 
    @Component({
      selector: "app-root",
@@ -57,7 +60,7 @@ npm install @emilgramdk/auth-service
 3. **Using the Service in API Service**: Inject the AuthService into your service.
 
    ```typescript
-   import { AuthService } from "@emilgramdk/auth-service";
+   import { AuthService } from "@emilgramdk/ngx-auth-service";
 
    @Injectable({
      providedIn: "root",

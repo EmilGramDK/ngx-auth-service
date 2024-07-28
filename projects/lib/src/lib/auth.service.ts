@@ -33,9 +33,15 @@ export class AuthService {
    * Logs the user out by removing the token and redirecting to the logout URL.
    */
   public logout() {
-    localStorage.removeItem(this.config.storageKey);
-    window.location.href =
-      this.config.authURL + "/logout?nextCallback=" + window.location.href;
+    this._removeCookie();
+    this._auth("logout");
+  }
+
+  /**
+   * Logs the user in by redirecting to the login URL.
+   */
+  public login() {
+    this._auth("login");
   }
 
   /**
@@ -48,19 +54,70 @@ export class AuthService {
   }
 
   /**
+   * Redirects the user to the login or logout page based on the type.
+   */
+  private _auth(type: "login" | "logout") {
+    window.location.href =
+      this.config.authURL + `/${type}?nextCallback=` + window.location.href;
+  }
+
+  /**
+   * Checks for a token in the URL or storage and validates it.
+   * If the token is invalid or not found, redirects to the login page.
+   */
+  private _checkToken() {
+    const tokenFromURL = new URLSearchParams(window.location.search).get(
+      "token"
+    );
+
+    if (tokenFromURL) {
+      this._setCookie(tokenFromURL);
+      this._setToken(tokenFromURL);
+      return;
+    }
+
+    const cookieToken = this._getCookie();
+    if (cookieToken && !this._isTokenExpired(cookieToken)) {
+      this._setToken(cookieToken);
+      return;
+    }
+
+    if (!this.config._disableAutoLogin) {
+      this._auth("login");
+    }
+  }
+
+  /**
+   * Sets the token in the internal state.
+   * @param token - The new authentication token.
+   * @returns True if the token was successfully set, otherwise false.
+   */
+  private _setToken(token: string): boolean {
+    try {
+      this.token = token;
+      this.tokenInfo = this._extractInfoFromToken(token);
+      this._scheduleExpiration();
+      return true;
+    } catch (error) {
+      console.error("Error setting token:", error);
+      return false;
+    }
+  }
+
+  /**
    * Extracts user information and token expiration details from the decoded token.
    * @returns An object containing time until token expiry and user information.
    */
-  private _extractInfoFromToken() {
+  private _extractInfoFromToken(token: string): TokenInfo {
     try {
-      const decodedToken = this._decodeJWT(this.token!);
+      const decodedToken = this._decodeJWT(token);
 
       const expirationDate = decodedToken.exp;
       const currentTime = Math.floor(Date.now() / 1000);
       const secondsUntilExpiry = expirationDate - currentTime;
       const minutes = Math.floor(secondsUntilExpiry / 60);
 
-      this.tokenInfo = {
+      return {
         timeUntilExpiry: { inMinutes: minutes, inSeconds: secondsUntilExpiry },
         user: {
           user_no: decodedToken.username,
@@ -71,65 +128,6 @@ export class AuthService {
       console.error("Error extracting token info:", error);
       throw new Error("Error extracting token info");
     }
-  }
-
-  /**
-   * Sets the token in local storage and updates the internal state.
-   * @param token - The new authentication token.
-   * @returns True if the token was successfully set, otherwise false.
-   */
-  private _setToken(token: string): boolean {
-    try {
-      localStorage.setItem(this.config.storageKey, token);
-      this.token = token;
-      this._extractInfoFromToken();
-      this._scheduleExpiration();
-      return true;
-    } catch (error) {
-      console.error("Error setting token:", error);
-      return false;
-    }
-  }
-
-  /**
-   * Checks for a token in the URL or local storage and validates it.
-   * If the token is invalid or not found, redirects to the login page.
-   */
-  private _checkToken() {
-    const token = new URLSearchParams(window.location.search).get("token");
-
-    if (token) {
-      this._setToken(token);
-      return;
-    }
-
-    this._getToken().then((token) => {
-      if (!token || this._isTokenExpired(token)) {
-        window.location.href =
-          this.config.authURL + "/login?nextCallback=" + window.location.href;
-      } else {
-        this._scheduleExpiration();
-      }
-    });
-  }
-
-  /**
-   * Retrieves the token from local storage.
-   * @returns A promise that resolves with the stored token or undefined if not found.
-   */
-  private async _getToken(): Promise<string | undefined> {
-    return new Promise<string | undefined>((resolve) => {
-      try {
-        const token = localStorage.getItem(this.config.storageKey);
-        this.token = token as string;
-        this._extractInfoFromToken();
-        resolve(this.token);
-      } catch (error) {
-        this.token = undefined;
-        resolve(undefined);
-        console.error("Error getting token:", error);
-      }
-    });
   }
 
   /**
@@ -185,8 +183,7 @@ export class AuthService {
    */
   private _scheduleRedirect(timeUntilExpiry: number) {
     setTimeout(() => {
-      window.location.href =
-        this.config.authURL + "/login?nextCallback=" + window.location.href;
+      this._auth("login");
     }, timeUntilExpiry * 1000);
   }
 
@@ -254,8 +251,7 @@ export class AuthService {
     });
 
     renewSession?.addEventListener("click", () => {
-      window.location.href =
-        this.config.authURL + "/login?nextCallback=" + window.location.href;
+      this._auth("login");
     });
   }
 
@@ -344,6 +340,34 @@ export class AuthService {
 
     // Decode base64 string
     return atob(base64);
+  }
+
+  private _setCookie(token: string) {
+    const date = new Date();
+    date.setTime(date.getTime() + 24 * 60 * 60 * 1000);
+    const expires = "expires=" + date.toUTCString();
+
+    document.cookie = `${this.config.storageKey}=${token}; ${expires}; path=/; SameSite=Strict; Secure;`;
+  }
+
+  private _getCookie(): string {
+    const name = this.config.storageKey + "=";
+    const decodedCookie = decodeURIComponent(document.cookie);
+    const ca = decodedCookie.split(";");
+    for (let i = 0; i < ca.length; i++) {
+      let c = ca[i];
+      while (c.charAt(0) == " ") {
+        c = c.substring(1);
+      }
+      if (c.indexOf(name) == 0) {
+        return c.substring(name.length, c.length);
+      }
+    }
+    return "";
+  }
+
+  private _removeCookie() {
+    document.cookie = `${this.config.storageKey}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
   }
 }
 

@@ -1,5 +1,5 @@
 {
-  "name": "@emilgramdk/auth-service",
+  "name": "@emilgramdk/ngx-auth-service",
   "version": "1.0.2",
   "funding": {
     "type": "github",
@@ -10,11 +10,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/emilgramdk/auth-service.git"
+    "url": "git+https://github.com/emilgramdk/ngx-auth-service.git"
   },
-  "homepage": "https://github.com/emilgramdk/auth-service",
+  "homepage": "https://github.com/emilgramdk/ngx-auth-service",
   "bugs": {
-    "url": "https://github.com/emilgramdk/auth-service/issues"
+    "url": "https://github.com/emilgramdk/ngx-auth-service/issues"
   },
   "peerDependencies": {
     "@angular/common": "^18.0.0",
