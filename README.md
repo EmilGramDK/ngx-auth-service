@@ -25,17 +25,23 @@ npm install @emilgramdk/ngx-auth-service
    ```typescript
    import { ApplicationConfig } from "@angular/core";
    import {
-     AUTH_CONFIG,
      AuthServiceConfig,
+     provideAuthService,
    } from "@emilgramdk/ngx-auth-service";
+   import { provideHttpClient } from "@angular/common/http";
 
    const authServiceConfig: AuthServiceConfig = {
-     authURL: "https://example.com/auth",
-     storageKey: "authToken",
+     authURL: "https://example.com/auth", // URL to authenticate
+     storageKey: "authToken", // Token cookie name
+     showRenewBeforeTenMin: true, // Show renew token popup 10 minutes before expiry
+     showRenewBeforeFiveMin: true, // Show renew token popup 5 minutes before expiry
    };
 
    export const appConfig: ApplicationConfig = {
-     providers: [{ provide: AUTH_CONFIG, useValue: authServiceConfig }],
+     providers: [
+       provideHttpClient(), // This is needed to send api request.
+       provideAuthService(authServiceConfig),
+     ],
    };
    ```
 
@@ -60,7 +66,7 @@ npm install @emilgramdk/ngx-auth-service
 3. **Using the Service in API Service**: Inject the AuthService into your service.
 
    ```typescript
-   import { AuthService } from "@emilgramdk/ngx-auth-service";
+   import { RequestService } from "@emilgramdk/ngx-auth-service";
 
    @Injectable({
      providedIn: "root",
@@ -68,21 +74,15 @@ npm install @emilgramdk/ngx-auth-service
    export class APIService {
      private apiURL = config.apiURL;
 
-     constructor(private http: HttpClient, private authService: AuthService) {}
-
-     private getURL(route: string): string {
-       return `${this.apiURL}${route}`;
+     constructor(private requestService: RequestService) {
+       this.requestService.setSettings("https://api.example.com/");
      }
 
-     private async getHeaders(
-       contentType: string = "application/json"
-     ): HttpHeaders {
-       const token = this.authService.token; // get the token from the authService
-
-       return new HttpHeaders({
-         Authorization: `Bearer ${token}`,
-         "Content-Type": contentType,
-       });
+     public async getAllUsers() {
+       const route = "users";
+       return this.requestService
+         .makeRequest<any>("GET", route)
+         .then((response) => response.value);
      }
    }
    ```

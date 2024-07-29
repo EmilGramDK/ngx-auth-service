@@ -7,6 +7,7 @@ export interface AuthServiceConfig {
   showRenewBeforeTenMin?: boolean; // Flag to show renew warning ten minutes before expiration.
   showRenewBeforeFiveMin?: boolean; // Flag to show renew warning five minutes before expiration.
   _disableAutoLogin?: boolean; // Flag to disable auto-login. Used for testing.
+  _debug?: boolean; // Flag to enable debug mode.
 }
 
 // Default configuration for the AuthService.
@@ -16,6 +17,7 @@ const defaultAuthServiceConfig: AuthServiceConfig = {
   showRenewBeforeTenMin: true,
   showRenewBeforeFiveMin: true,
   _disableAutoLogin: false,
+  _debug: false,
 };
 
 /**
@@ -24,7 +26,7 @@ const defaultAuthServiceConfig: AuthServiceConfig = {
  * @returns A complete AuthServiceConfig object.
  */
 export function mergeAuthServiceConfig(
-  config: Partial<AuthServiceConfig>
+  config: Partial<AuthServiceConfig> = {}
 ): AuthServiceConfig {
   return { ...defaultAuthServiceConfig, ...config };
 }

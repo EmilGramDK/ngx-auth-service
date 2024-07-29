@@ -5,20 +5,34 @@ import { AUTH_CONFIG, AuthServiceConfig } from "./config";
   providedIn: "root",
 })
 export class AuthService {
-  public token?: string;
-  public tokenInfo?: TokenInfo;
+  public hasToken: boolean = false; // Can be used to check if the user is authenticated
+  private token?: string;
+  private tokenInfo?: TokenInfo;
 
   // Constructor to initialize AuthService with configuration settings
   constructor(@Inject(AUTH_CONFIG) private config: AuthServiceConfig) {
-    this._checkToken();
+    try {
+      if (this.config._debug) {
+        console.log("DEBUG AuthService config:", this.config);
+      }
+      this._checkToken();
+    } catch (error) {
+      console.error("Error initializing AuthService:", error);
+    }
   }
 
   /**
    * Retrieves the stored token, if available.
-   * @returns The current authentication token or undefined if not set.
+   * @returns The current authentication token or undefined if not set or expired.
    */
   public getToken(): string | undefined {
-    return this.token;
+    try {
+      if (this._isTokenExpired(this.token!)) return;
+      return this.token;
+    } catch (error) {
+      console.error("Error retrieving token:", error);
+      return;
+    }
   }
 
   /**
@@ -26,6 +40,7 @@ export class AuthService {
    * @returns An object containing time until token expiry and user information.
    */
   public getTokenInfo(): TokenInfo | undefined {
+    this._extractInfoFromToken();
     return this.tokenInfo;
   }
 
@@ -49,8 +64,9 @@ export class AuthService {
    * @param type - The type of popup, either 'expiry' or 'user'.
    * @param fixedTime - Optional time in minutes for token expiry warning.
    */
-  public showPopup(type: "expiry" | "user", fixedTime: number = 0) {
-    this._showPopup(type, fixedTime);
+  public showPopup(type: "expiry" | "user") {
+    this._extractInfoFromToken();
+    this._showPopup(type);
   }
 
   /**
@@ -70,16 +86,29 @@ export class AuthService {
       "token"
     );
 
+    if (this.config._debug) {
+      console.log("DEBUG tokenFromURL:", tokenFromURL);
+    }
+
     if (tokenFromURL) {
       this._setCookie(tokenFromURL);
       this._setToken(tokenFromURL);
       return;
     }
 
-    const cookieToken = this._getCookie();
+    const cookieToken = this._getTokenFromCookie();
+
+    if (this.config._debug) {
+      console.log("DEBUG cookieToken:", cookieToken);
+    }
+
     if (cookieToken && !this._isTokenExpired(cookieToken)) {
       this._setToken(cookieToken);
       return;
+    }
+
+    if (this.config._debug) {
+      console.log("DEBUG _disableAutoLogin:", this.config._disableAutoLogin);
     }
 
     if (!this.config._disableAutoLogin) {
@@ -95,7 +124,8 @@ export class AuthService {
   private _setToken(token: string): boolean {
     try {
       this.token = token;
-      this.tokenInfo = this._extractInfoFromToken(token);
+      this.hasToken = true;
+      this._extractInfoFromToken();
       this._scheduleExpiration();
       return true;
     } catch (error) {
@@ -108,22 +138,24 @@ export class AuthService {
    * Extracts user information and token expiration details from the decoded token.
    * @returns An object containing time until token expiry and user information.
    */
-  private _extractInfoFromToken(token: string): TokenInfo {
+  private _extractInfoFromToken(token: string = "") {
     try {
-      const decodedToken = this._decodeJWT(token);
+      const decodedToken = this._decodeJWT(token || this.token!);
 
       const expirationDate = decodedToken.exp;
       const currentTime = Math.floor(Date.now() / 1000);
       const secondsUntilExpiry = expirationDate - currentTime;
       const minutes = Math.floor(secondsUntilExpiry / 60);
 
-      return {
+      const tokenInfo = {
         timeUntilExpiry: { inMinutes: minutes, inSeconds: secondsUntilExpiry },
         user: {
-          user_no: decodedToken.username,
+          username: decodedToken.username,
           database: decodedToken.database,
         },
       };
+
+      this.tokenInfo = tokenInfo;
     } catch (error) {
       console.error("Error extracting token info:", error);
       throw new Error("Error extracting token info");
@@ -194,6 +226,7 @@ export class AuthService {
    */
   private _isTokenExpired(token: string): boolean {
     try {
+      this._extractInfoFromToken(token);
       if (this.tokenInfo!.timeUntilExpiry.inSeconds <= 0) {
         return true;
       }
@@ -268,7 +301,7 @@ export class AuthService {
 
     const userMessage = `
     You are logged in as<br />
-    <span style="text-transform: uppercase; font-weight: bold;">${tokenInfo.user.user_no}</span>
+    <span style="text-transform: uppercase; font-weight: bold;">${tokenInfo.user.username}</span>
     <br /><br />
     Aras Database<br />
     <span style="text-transform: uppercase; font-weight: bold;">${tokenInfo.user.database}</span>
@@ -343,35 +376,71 @@ export class AuthService {
   }
 
   private _setCookie(token: string) {
-    const date = new Date();
-    date.setTime(date.getTime() + 24 * 60 * 60 * 1000);
-    const expires = "expires=" + date.toUTCString();
+    try {
+      const date = new Date();
+      date.setTime(date.getTime() + 24 * 60 * 60 * 1000);
+      const expires = "expires=" + date.toUTCString();
 
-    document.cookie = `${this.config.storageKey}=${token}; ${expires}; path=/; SameSite=Strict; Secure;`;
+      const cookie = `${this.config.storageKey}=${token}; ${expires}; path=/; SameSite=Strict; Secure;`;
+
+      if (this.config._debug) {
+        console.log("DEBUG _setCookie:", cookie);
+      }
+
+      document.cookie = cookie;
+    } catch (error) {
+      console.error("Error setting cookie:", error);
+    }
   }
 
-  private _getCookie(): string {
-    const name = this.config.storageKey + "=";
-    const decodedCookie = decodeURIComponent(document.cookie);
-    const ca = decodedCookie.split(";");
-    for (let i = 0; i < ca.length; i++) {
-      let c = ca[i];
-      while (c.charAt(0) == " ") {
-        c = c.substring(1);
+  private _getTokenFromCookie(): string {
+    try {
+      const name = this.config.storageKey + "=";
+      const decodedCookie = decodeURIComponent(document.cookie);
+
+      if (this.config._debug) {
+        console.log("DEBUG cookie name:", name);
+        console.log("DEBUG decodedCookie:", decodedCookie);
       }
-      if (c.indexOf(name) == 0) {
-        return c.substring(name.length, c.length);
+
+      const ca = decodedCookie.split(";");
+      for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) == " ") {
+          c = c.substring(1);
+        }
+        if (c.indexOf(name) == 0) {
+          const token = c.substring(name.length, c.length);
+
+          if (this.config._debug) {
+            console.log("DEBUG found token in cookie:", token);
+          }
+
+          return token;
+        }
       }
+      return "";
+    } catch (error) {
+      console.error("Error getting token from cookie:", error);
+      return "";
     }
-    return "";
   }
 
   private _removeCookie() {
-    document.cookie = `${this.config.storageKey}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+    try {
+      document.cookie = `${this.config.storageKey}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+    } catch (error) {
+      console.error("Error removing cookie:", error);
+    }
   }
 }
 
+/**
+ * Defines the shape of the token information object.
+ * @param timeUntilExpiry - The time until the token expires.
+ * @param user - The user information.
+ */
 export interface TokenInfo {
   timeUntilExpiry: { inMinutes: number; inSeconds: number };
-  user: { user_no: string; database: string };
+  user: { username: string; database: string };
 }
