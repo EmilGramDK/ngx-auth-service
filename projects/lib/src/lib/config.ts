@@ -3,10 +3,10 @@ import { InjectionToken } from "@angular/core";
 // Defines the shape of the configuration object for the AuthService.
 export interface AuthServiceConfig {
   authURL: string; // The URL to authenticate users.
+  database?: string; // The database to authenticate users.
   storageKey?: string; // Key to store the authentication token in local storage.
-  showRenewBeforeTenMin?: boolean; // Flag to show renew warning ten minutes before expiration.
   showRenewBeforeFiveMin?: boolean; // Flag to show renew warning five minutes before expiration.
-  _disableAutoLogin?: boolean; // Flag to disable auto-login. Used for testing.
+  _disable?: boolean; // Flag to disable auto-login. Used for testing.
   _debug?: boolean; // Flag to enable debug mode.
 }
 
@@ -14,9 +14,8 @@ export interface AuthServiceConfig {
 const defaultAuthServiceConfig: AuthServiceConfig = {
   authURL: "https://example.com/auth",
   storageKey: "authToken",
-  showRenewBeforeTenMin: true,
   showRenewBeforeFiveMin: true,
-  _disableAutoLogin: false,
+  _disable: false,
   _debug: false,
 };
 

@@ -1,5 +1,7 @@
 import { Inject, Injectable } from "@angular/core";
 import { AUTH_CONFIG, AuthServiceConfig } from "./config";
+import { HttpClient } from "@angular/common/http";
+import { firstValueFrom } from "rxjs";
 
 @Injectable({
   providedIn: "root",
@@ -7,14 +9,24 @@ import { AUTH_CONFIG, AuthServiceConfig } from "./config";
 export class AuthService {
   public hasToken: boolean = false; // Can be used to check if the user is authenticated
   private token?: string;
+  private refreshToken?: string;
   private tokenInfo?: TokenInfo;
+  private refreshTimeoutId: any;
+  private fiveMinuteTimeoutId: any;
+  private redirectTimeoutId: any;
 
   // Constructor to initialize AuthService with configuration settings
-  constructor(@Inject(AUTH_CONFIG) private config: AuthServiceConfig) {
+  constructor(
+    @Inject(AUTH_CONFIG) private config: AuthServiceConfig,
+    private http: HttpClient
+  ) {
     try {
       if (this.config._debug) {
         console.log("DEBUG AuthService config:", this.config);
       }
+
+      if (this.config._disable) return; // Disable auto-login for testing
+
       this._checkToken();
     } catch (error) {
       console.error("Error initializing AuthService:", error);
@@ -25,13 +37,13 @@ export class AuthService {
    * Retrieves the stored token, if available.
    * @returns The current authentication token or undefined if not set or expired.
    */
-  public getToken(): string | undefined {
+  public getTokens(): { token?: string; refreshToken?: string } {
     try {
-      if (this._isTokenExpired(this.token!)) return;
-      return this.token;
+      if (this._isTokenExpired(this.token!)) return {};
+      return { token: this.token, refreshToken: this.refreshToken };
     } catch (error) {
       console.error("Error retrieving token:", error);
-      return;
+      return {};
     }
   }
 
@@ -45,10 +57,47 @@ export class AuthService {
   }
 
   /**
+   * Attempts to refresh the authentication token using the refresh token.
+   * @returns A promise that resolves to true if the token was refreshed successfully, otherwise false.
+   */
+  public async tryToRefreshToken(): Promise<boolean> {
+    if (!this.refreshToken) {
+      console.error("No refresh token available.");
+      return false;
+    }
+
+    let data: { refreshToken: string; _db?: string } = {
+      refreshToken: this.refreshToken,
+    };
+
+    if (this.config?.database) {
+      data._db = this.config.database;
+    }
+
+    try {
+      const response: any = await firstValueFrom(
+        this.http.post(`${this.config.authURL}/refresh`, data)
+      );
+      if (response && response.token) {
+        this._setCookies(response.token, response.refresh_token);
+        this._setTokens(response.token, response.refresh_token);
+        console.log("Token refreshed successfully.");
+        return true;
+      } else {
+        console.error("Failed to refresh token.");
+        return false;
+      }
+    } catch (error) {
+      console.error("Error refreshing token:", error);
+      return false;
+    }
+  }
+
+  /**
    * Logs the user out by removing the token and redirecting to the logout URL.
    */
   public logout() {
-    this._removeCookie();
+    this._removeCookies();
     this._auth("logout");
   }
 
@@ -73,8 +122,10 @@ export class AuthService {
    * Redirects the user to the login or logout page based on the type.
    */
   private _auth(type: "login" | "logout") {
+    const dbParam = this.config.database ? `&_db=${this.config.database}` : "";
+
     window.location.href =
-      this.config.authURL + `/${type}?nextCallback=` + window.location.href;
+      this.config.authURL + `/${type}?_next=` + window.location.href + dbParam;
   }
 
   /**
@@ -82,36 +133,44 @@ export class AuthService {
    * If the token is invalid or not found, redirects to the login page.
    */
   private _checkToken() {
-    const tokenFromURL = new URLSearchParams(window.location.search).get(
-      "token"
-    );
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromURL = params.get("token");
+    const refreshTokenFromURL = params.get("refresh_token") || "";
 
     if (this.config._debug) {
       console.log("DEBUG tokenFromURL:", tokenFromURL);
+      console.log("DEBUG refreshTokenFromURL:", refreshTokenFromURL);
     }
 
     if (tokenFromURL) {
-      this._setCookie(tokenFromURL);
-      this._setToken(tokenFromURL);
+      this._setCookies(tokenFromURL, refreshTokenFromURL);
+      this._setTokens(tokenFromURL, refreshTokenFromURL);
+
+      // Remove the token and refresh_token from the URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+
       return;
     }
 
-    const cookieToken = this._getTokenFromCookie();
+    const cookieTokens = this._getTokensFromCookie();
+    const cookieToken = cookieTokens.token;
+    const cookieRefreshToken = cookieTokens.refreshToken;
 
     if (this.config._debug) {
       console.log("DEBUG cookieToken:", cookieToken);
+      console.log("DEBUG cookieRefreshToken:", cookieRefreshToken);
     }
 
     if (cookieToken && !this._isTokenExpired(cookieToken)) {
-      this._setToken(cookieToken);
+      this._setTokens(cookieToken, cookieRefreshToken);
       return;
     }
 
     if (this.config._debug) {
-      console.log("DEBUG _disableAutoLogin:", this.config._disableAutoLogin);
+      console.log("DEBUG _disable:", this.config._disable);
     }
 
-    if (!this.config._disableAutoLogin) {
+    if (!this.config._disable) {
       this._auth("login");
     }
   }
@@ -121,9 +180,14 @@ export class AuthService {
    * @param token - The new authentication token.
    * @returns True if the token was successfully set, otherwise false.
    */
-  private _setToken(token: string): boolean {
+  private _setTokens(token: string, refreshToken?: string): boolean {
     try {
       this.token = token;
+
+      if (refreshToken) {
+        this.refreshToken = refreshToken;
+      }
+
       this.hasToken = true;
       this._extractInfoFromToken();
       this._scheduleExpiration();
@@ -166,6 +230,8 @@ export class AuthService {
    * Schedules actions based on the token's expiration time, such as displaying popups or redirecting.
    */
   private _scheduleExpiration() {
+    this._clearTimers();
+
     try {
       if (this.tokenInfo) {
         console.log(
@@ -193,14 +259,14 @@ export class AuthService {
     const fiveMinutes = 5 * 60;
 
     if (timeUntilExpiry > tenMinutes) {
-      if (this.config.showRenewBeforeTenMin) {
-        setTimeout(() => {
-          this._showPopup("expiry", 10);
+      if (this.refreshToken) {
+        this.refreshTimeoutId = setTimeout(() => {
+          this.tryToRefreshToken();
         }, (timeUntilExpiry - tenMinutes) * 1000);
       }
 
       if (this.config.showRenewBeforeFiveMin) {
-        setTimeout(() => {
+        this.fiveMinuteTimeoutId = setTimeout(() => {
           this._showPopup("expiry", 5);
         }, (timeUntilExpiry - fiveMinutes) * 1000);
       }
@@ -214,9 +280,24 @@ export class AuthService {
    * @param timeUntilExpiry - Time in seconds until the token expires.
    */
   private _scheduleRedirect(timeUntilExpiry: number) {
-    setTimeout(() => {
+    this.redirectTimeoutId = setTimeout(() => {
       this._auth("login");
     }, timeUntilExpiry * 1000);
+  }
+
+  private _clearTimers() {
+    if (this.refreshTimeoutId) {
+      clearTimeout(this.refreshTimeoutId);
+      this.refreshTimeoutId = null;
+    }
+    if (this.fiveMinuteTimeoutId) {
+      clearTimeout(this.fiveMinuteTimeoutId);
+      this.fiveMinuteTimeoutId = null;
+    }
+    if (this.redirectTimeoutId) {
+      clearTimeout(this.redirectTimeoutId);
+      this.redirectTimeoutId = null;
+    }
   }
 
   /**
@@ -375,17 +456,25 @@ export class AuthService {
     return atob(base64);
   }
 
-  private _setCookie(token: string) {
+  private _setCookies(token: string, refreshToken?: string) {
+    try {
+      this._setCookie(token, this.config.storageKey!);
+
+      if (refreshToken) {
+        this._setCookie(refreshToken, this.config.storageKey + "_refresh");
+      }
+    } catch (error) {
+      console.error("Error setting cookies:", error);
+    }
+  }
+
+  private _setCookie(token: string, name: string) {
     try {
       const date = new Date();
       date.setTime(date.getTime() + 24 * 60 * 60 * 1000);
       const expires = "expires=" + date.toUTCString();
 
-      const cookie = `${this.config.storageKey}=${token}; ${expires}; path=/; SameSite=Strict; Secure;`;
-
-      if (this.config._debug) {
-        console.log("DEBUG _setCookie:", cookie);
-      }
+      const cookie = `${name}=${token}; ${expires}; path=/; SameSite=Strict; Secure;`;
 
       document.cookie = cookie;
     } catch (error) {
@@ -393,15 +482,27 @@ export class AuthService {
     }
   }
 
-  private _getTokenFromCookie(): string {
+  private _getTokensFromCookie(): { token: string; refreshToken?: string } {
     try {
-      const name = this.config.storageKey + "=";
-      const decodedCookie = decodeURIComponent(document.cookie);
+      const token = this._getCookie(this.config.storageKey!);
 
-      if (this.config._debug) {
-        console.log("DEBUG cookie name:", name);
-        console.log("DEBUG decodedCookie:", decodedCookie);
+      const refreshToken = this._getCookie(this.config.storageKey + "_refresh");
+
+      if (refreshToken) {
+        return { token, refreshToken };
       }
+
+      return { token };
+    } catch (error) {
+      console.error("Error getting token from cookie:", error);
+      return { token: "" };
+    }
+  }
+
+  private _getCookie(name: string) {
+    try {
+      const cookieName = name + "=";
+      const decodedCookie = decodeURIComponent(document.cookie);
 
       const ca = decodedCookie.split(";");
       for (let i = 0; i < ca.length; i++) {
@@ -409,26 +510,21 @@ export class AuthService {
         while (c.charAt(0) == " ") {
           c = c.substring(1);
         }
-        if (c.indexOf(name) == 0) {
-          const token = c.substring(name.length, c.length);
-
-          if (this.config._debug) {
-            console.log("DEBUG found token in cookie:", token);
-          }
-
-          return token;
+        if (c.indexOf(cookieName) == 0) {
+          return c.substring(cookieName.length, c.length);
         }
       }
       return "";
     } catch (error) {
-      console.error("Error getting token from cookie:", error);
+      console.error("Error getting cookie:", error);
       return "";
     }
   }
 
-  private _removeCookie() {
+  private _removeCookies() {
     try {
       document.cookie = `${this.config.storageKey}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+      document.cookie = `${this.config.storageKey}_refresh=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
     } catch (error) {
       console.error("Error removing cookie:", error);
     }

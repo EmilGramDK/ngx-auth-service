@@ -16,7 +16,8 @@ export class RequestService {
   private token?: string;
 
   constructor(private authService: AuthService, private http: HttpClient) {
-    this.token = this.authService.getToken();
+    const tokens = this.authService.getTokens();
+    this.token = tokens?.token;
   }
 
   /**

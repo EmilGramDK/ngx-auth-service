@@ -33,7 +33,6 @@ npm install @emilgramdk/ngx-auth-service
    const authServiceConfig: AuthServiceConfig = {
      authURL: "https://example.com/auth", // URL to authenticate
      storageKey: "authToken", // Token cookie name
-     showRenewBeforeTenMin: true, // Show renew token popup 10 minutes before expiry
      showRenewBeforeFiveMin: true, // Show renew token popup 5 minutes before expiry
    };
 
