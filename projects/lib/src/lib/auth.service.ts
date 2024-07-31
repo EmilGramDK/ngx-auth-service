@@ -12,7 +12,7 @@ export class AuthService {
   private refreshToken?: string;
   private tokenInfo?: TokenInfo;
   private refreshTimeoutId: any;
-  private fiveMinuteTimeoutId: any;
+  private tenMinuteTimeoutId: any;
   private redirectTimeoutId: any;
 
   // Constructor to initialize AuthService with configuration settings
@@ -256,23 +256,36 @@ export class AuthService {
    * Schedules a popup to notify the user before the token expires.
    * @param timeUntilExpiry - Time in seconds until the token expires.
    */
-  private _scheduleExpiryPopup(timeUntilExpiry: number) {
-    const tenMinutes = 10 * 60;
-    const fiveMinutes = 5 * 60;
+  private async _scheduleExpiryPopup(timeUntilExpiryInSeconds: number) {
+    let refreshBefore = this.config.refreshBeforeExpireInMinutes || 30;
+    refreshBefore = refreshBefore < 11 ? 11 : refreshBefore;
+    refreshBefore = refreshBefore > 59 ? 59 : refreshBefore;
 
-    if (timeUntilExpiry > tenMinutes) {
-      if (this.refreshToken) {
+    const refreshBeforeInSeconds = refreshBefore * 60;
+    const tenMinutesInSeconds = 10 * 60;
+
+    try {
+      if (timeUntilExpiryInSeconds > refreshBeforeInSeconds) {
         this.refreshTimeoutId = setTimeout(() => {
           this.tryToRefreshToken();
-        }, (timeUntilExpiry - tenMinutes) * 1000);
+        }, (timeUntilExpiryInSeconds - refreshBeforeInSeconds) * 1000);
+
+        if (this.config.showRenewBeforeTenMin) {
+          this.tenMinuteTimeoutId = setTimeout(() => {
+            this._showPopup("expiry", 10);
+          }, (timeUntilExpiryInSeconds - tenMinutesInSeconds) * 1000);
+        }
+
+        return;
       }
 
-      if (this.config.showRenewBeforeFiveMin) {
-        this.fiveMinuteTimeoutId = setTimeout(() => {
-          this._showPopup("expiry", 5);
-        }, (timeUntilExpiry - fiveMinutes) * 1000);
+      const response = await this.tryToRefreshToken();
+
+      if (!response) {
+        this._showPopup("expiry");
       }
-    } else {
+    } catch (error) {
+      console.error("Error refreshing token:", error);
       this._showPopup("expiry");
     }
   }
@@ -292,9 +305,9 @@ export class AuthService {
       clearTimeout(this.refreshTimeoutId);
       this.refreshTimeoutId = null;
     }
-    if (this.fiveMinuteTimeoutId) {
-      clearTimeout(this.fiveMinuteTimeoutId);
-      this.fiveMinuteTimeoutId = null;
+    if (this.tenMinuteTimeoutId) {
+      clearTimeout(this.tenMinuteTimeoutId);
+      this.tenMinuteTimeoutId = null;
     }
     if (this.redirectTimeoutId) {
       clearTimeout(this.redirectTimeoutId);
@@ -384,10 +397,17 @@ export class AuthService {
 
     const userMessage = `
     You are logged in as<br />
-    <span style="text-transform: uppercase; font-weight: bold;">${tokenInfo.user.username}</span>
+    <span style="text-transform: uppercase; font-weight: bold;">${
+      tokenInfo.user.username
+    }</span>
     <br /><br />
     Aras Database<br />
-    <span style="text-transform: uppercase; font-weight: bold;">${tokenInfo.user.database}</span>
+    <span style="text-transform: uppercase; font-weight: bold;">${
+      tokenInfo.user.database
+    }</span>
+    <br /><br />
+    Auto Renew<br />
+    <span style="font-weight: bold;">${this.refreshToken ? "ON" : "OFF"}</span>
     <br /><br />
     Your session will expire in<br />
     <span style="font-weight: bold;">${minutes} minutes</span>
@@ -397,8 +417,8 @@ export class AuthService {
     Your session will expire in<br />
     <span style="font-weight: bold;">${minutes} minutes</span>
     <br /><br />
-    Would you like to renew your session now?<br /><br />
-    If you do not renew your session, you will be redirected<br />
+    Would you like to renew it now?<br /><br />
+    If you choose not to renew, you will be redirected<br />
     to the login page in ${minutes} minutes, so please save your work.
   `;
 
