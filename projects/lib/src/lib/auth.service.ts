@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@angular/core";
 import { AUTH_CONFIG, AuthServiceConfig } from "./config";
-import { HttpClient } from "@angular/common/http";
+import { HttpClient, HttpParams } from "@angular/common/http";
 import { firstValueFrom } from "rxjs";
 
 @Injectable({
@@ -66,17 +66,17 @@ export class AuthService {
       return false;
     }
 
-    let data: { refreshToken: string; _db?: string } = {
-      refreshToken: this.refreshToken,
-    };
+    let data = new HttpParams().set("refresh_token", this.refreshToken);
 
     if (this.config?.database) {
-      data._db = this.config.database;
+      data = data.set("database", this.config.database);
     }
 
     try {
       const response: any = await firstValueFrom(
-        this.http.post(`${this.config.authURL}/refresh`, data)
+        this.http.post(`${this.config.authURL}/refresh`, data.toString(), {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        })
       );
       if (response && response.token) {
         this._setCookies(response.token, response.refresh_token);
@@ -122,10 +122,12 @@ export class AuthService {
    * Redirects the user to the login or logout page based on the type.
    */
   private _auth(type: "login" | "logout") {
-    const dbParam = this.config.database ? `&_db=${this.config.database}` : "";
+    const dbParam = this.config.database
+      ? `&database=${this.config.database}`
+      : "";
 
     window.location.href =
-      this.config.authURL + `/${type}?_next=` + window.location.href + dbParam;
+      this.config.authURL + `/${type}?next=` + window.location.href + dbParam;
   }
 
   /**
