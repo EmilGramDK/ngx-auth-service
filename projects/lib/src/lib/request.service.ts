@@ -83,6 +83,9 @@ export class RequestService {
       case "PATCH":
         request = this.http.patch<T>(url, data, options);
         break;
+      case "DELETE":
+        request = this.http.delete<T>(url, options);
+        break;
       default:
         throw new Error(`Unsupported request method: ${method}`);
     }
