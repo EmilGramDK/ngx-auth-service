@@ -44,6 +44,7 @@ export class RequestService {
    * @param route The API route to call.
    * @param data The data to send with the request.
    * @param customApiSettings Custom API settings to use for this request.
+   * @param replacements An array of word replacements where the key is the word to replace and the value is the replacement word.
    * @returns An observable with the response data.
    * @throws If the API settings are not set or the user is not logged in.
    */
@@ -51,7 +52,8 @@ export class RequestService {
     method: string,
     route: string,
     data?: any,
-    customApiSettings?: Partial<ApiSettings>
+    customApiSettings?: Partial<ApiSettings>,
+    keyReplacements?: { [key: string]: string }
   ) {
     if (!this.apiSettings && !customApiSettings) {
       throw new Error(
@@ -93,6 +95,7 @@ export class RequestService {
     return firstValueFrom(
       request.pipe(
         map((response) => this._transformKeys(response)),
+        map((response) => this._replaceKeys(response, keyReplacements)),
         retry(apiSettings.retryCount || 0),
         catchError(this._handleError)
       )
@@ -120,6 +123,34 @@ export class RequestService {
     return throwError(
       () => new Error("Something went wrong; please try again later.")
     );
+  }
+
+  /**
+   * Recursively traverses and replaces keys in the response object.
+   * @param obj The response object.
+   * @param replacements An array of word replacements where the key is the word to replace and the value is the replacement word.
+   * @returns The modified object.
+   */
+  private _replaceKeys(
+    obj: any,
+    replacements?: { [key: string]: string }
+  ): any {
+    if (!replacements) return obj;
+
+    if (Array.isArray(obj)) {
+      return obj.map((item) => this._replaceKeys(item, replacements));
+    } else if (obj !== null && typeof obj === "object") {
+      const newObj: { [key: string]: any } = {};
+      for (const key in obj) {
+        if (obj.hasOwnProperty(key)) {
+          const newKey = replacements[key] || key; // Replace key if it exists in replacements, otherwise use original key
+          newObj[newKey] = this._replaceKeys(obj[key], replacements);
+        }
+      }
+      return newObj;
+    } else {
+      return obj;
+    }
   }
 
   /**
@@ -154,4 +185,6 @@ export interface ApiSettings {
   apiURL: string;
   transformKeys: boolean;
   retryCount: number;
+  trackURL?: string;
+  trackApp?: string;
 }

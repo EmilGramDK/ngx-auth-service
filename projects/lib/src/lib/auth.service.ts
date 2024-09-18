@@ -78,17 +78,19 @@ export class AuthService {
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
         })
       );
-      if (response && response.token) {
-        this._setCookies(response.token, response.refresh_token);
-        this._setTokens(response.token, response.refresh_token);
+      if (response && response.access_token) {
+        this._setCookies(response.access_token, response.refresh_token);
+        this._setTokens(response.access_token, response.refresh_token);
         console.log("Token refreshed successfully.");
         return true;
       } else {
         console.error("Failed to refresh token.");
+        this._disableRefresh();
         return false;
       }
     } catch (error) {
       console.error("Error refreshing token:", error);
+      this._disableRefresh();
       return false;
     }
   }
@@ -134,6 +136,7 @@ export class AuthService {
       window.location.href +
       dbParam +
       applicationParam;
+    this.config.authURL + `/${type}?next=` + window.location.href + dbParam;
   }
 
   /**
@@ -549,10 +552,23 @@ export class AuthService {
     }
   }
 
+  private _disableRefresh() {
+    this.refreshToken = undefined;
+    this._removeCookie(this.config.storageKey + "_refresh");
+  }
+
   private _removeCookies() {
     try {
-      document.cookie = `${this.config.storageKey}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-      document.cookie = `${this.config.storageKey}_refresh=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+      this._removeCookie(this.config.storageKey!);
+      this._removeCookie(this.config.storageKey + "_refresh");
+    } catch (error) {
+      console.error("Error removing cookie:", error);
+    }
+  }
+
+  private _removeCookie(name: string) {
+    try {
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
     } catch (error) {
       console.error("Error removing cookie:", error);
     }
