@@ -126,8 +126,14 @@ export class AuthService {
       ? `&database=${this.config.database}`
       : "";
 
+    const applicationParam = `&appName=${this.config.application}`;
+
     window.location.href =
-      this.config.authURL + `/${type}?next=` + window.location.href + dbParam;
+      this.config.authURL +
+      `/${type}?next=` +
+      window.location.href +
+      dbParam +
+      applicationParam;
   }
 
   /**
