@@ -177,14 +177,10 @@ export class AuthService {
    * @returns True if the page is not forbidden, otherwise false.
    */
   private checkForbiddenPage(cookieToken: string): boolean {
-    const location = window.location.href;
-    const baseURL = this._removeTrailingSlash(this.config.baseURL);
-    const url = this._removeTrailingSlash(location.replace(baseURL, ""));
-
-    const isForbiddenPage = url.startsWith("auth_unauthorized");
-    if (!isForbiddenPage) return true;
+    if (!this.isForbiddenPage()) return true;
 
     if (this._isTokenExpired(cookieToken)) {
+      const baseURL = this._removeTrailingSlash(this.config.baseURL);
       window.location.href = baseURL;
       return false;
     }
@@ -192,13 +188,21 @@ export class AuthService {
     return false;
   }
 
+  public isForbiddenPage(): boolean {
+    const location = window.location.href;
+    return location.includes("auth_unauthorized");
+  }
+
   /**
    * Redirects the user to the forbidden page with the current route.
    * @param route - The current route to redirect to after login.
    **/
   public goToForbidden(route: string) {
+    if (this.isForbiddenPage()) return;
     const baseURL = this._removeTrailingSlash(this.config.baseURL);
-    window.location.href = `${baseURL}/auth_unauthorized?route=${route}`;
+    window.location.href = `${baseURL}/auth_unauthorized?route=${encodeURIComponent(
+      route
+    )}`;
   }
 
   /**

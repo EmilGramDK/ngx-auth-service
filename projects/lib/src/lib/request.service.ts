@@ -1,4 +1,4 @@
-import { Injectable } from "@angular/core";
+import { Inject, Injectable } from "@angular/core";
 import {
   HttpClient,
   HttpErrorResponse,
@@ -7,6 +7,7 @@ import {
 import { firstValueFrom, throwError } from "rxjs";
 import { catchError, retry, map } from "rxjs/operators";
 import { AuthService } from "./auth.service";
+import { AUTH_CONFIG, AuthServiceConfig } from "./config";
 
 @Injectable({
   providedIn: "root",
@@ -15,9 +16,16 @@ export class RequestService {
   private apiSettings?: ApiSettings;
   private token?: string;
 
-  constructor(private authService: AuthService, private http: HttpClient) {
+  constructor(
+    @Inject(AUTH_CONFIG) private config: AuthServiceConfig,
+    private authService: AuthService,
+    private http: HttpClient
+  ) {
+    if (this.authService.isForbiddenPage()) return;
+
     const tokens = this.authService.getTokens();
     this.token = tokens?.token;
+    this._handleError = this._handleError.bind(this);
   }
 
   /**
@@ -122,8 +130,12 @@ export class RequestService {
     console.error("An error occurred:", error);
 
     if (error.status === 401) {
-      const url = error.url || "";
-      this.authService.goToForbidden(url.slice(0, 25));
+      const parsedURL = new URL(error.url || "");
+      const route = parsedURL.pathname.substring(
+        parsedURL.pathname.indexOf("/") + 1
+      );
+
+      this.authService.goToForbidden(route);
     }
 
     return throwError(
