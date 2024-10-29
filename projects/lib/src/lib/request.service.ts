@@ -120,6 +120,12 @@ export class RequestService {
    */
   private async _handleError(error: HttpErrorResponse) {
     console.error("An error occurred:", error);
+
+    if (error.status === 401) {
+      const url = error.url || "";
+      this.authService.goToForbidden(url.slice(0, 25));
+    }
+
     return throwError(
       () => new Error("Something went wrong; please try again later.")
     );
@@ -185,6 +191,4 @@ export interface ApiSettings {
   apiURL: string;
   transformKeys: boolean;
   retryCount: number;
-  trackURL?: string;
-  trackApp?: string;
 }

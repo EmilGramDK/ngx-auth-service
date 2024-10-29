@@ -21,10 +21,6 @@ export class AuthService {
     private http: HttpClient
   ) {
     try {
-      if (this.config._debug) {
-        console.log("DEBUG AuthService config:", this.config);
-      }
-
       if (this.config._disable) return; // Disable auto-login for testing
 
       this._checkToken();
@@ -73,8 +69,10 @@ export class AuthService {
     }
 
     try {
+      const authURL = this._removeTrailingSlash(this.config.authURL);
+
       const response: any = await firstValueFrom(
-        this.http.post(`${this.config.authURL}/refresh`, data.toString(), {
+        this.http.post(`${authURL}/refresh`, data.toString(), {
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
         })
       );
@@ -129,14 +127,14 @@ export class AuthService {
       : "";
 
     const applicationParam = `&appName=${this.config.application}`;
+    const authURL = this._removeTrailingSlash(this.config.authURL);
 
     window.location.href =
-      this.config.authURL +
+      authURL +
       `/${type}?next=` +
       window.location.href +
       dbParam +
       applicationParam;
-    this.config.authURL + `/${type}?next=` + window.location.href + dbParam;
   }
 
   /**
@@ -147,11 +145,6 @@ export class AuthService {
     const params = new URLSearchParams(window.location.search);
     const tokenFromURL = params.get("token");
     const refreshTokenFromURL = params.get("refresh_token") || "";
-
-    if (this.config._debug) {
-      console.log("DEBUG tokenFromURL:", tokenFromURL);
-      console.log("DEBUG refreshTokenFromURL:", refreshTokenFromURL);
-    }
 
     if (tokenFromURL) {
       this._setCookies(tokenFromURL, refreshTokenFromURL);
@@ -167,23 +160,45 @@ export class AuthService {
     const cookieToken = cookieTokens.token;
     const cookieRefreshToken = cookieTokens.refreshToken;
 
-    if (this.config._debug) {
-      console.log("DEBUG cookieToken:", cookieToken);
-      console.log("DEBUG cookieRefreshToken:", cookieRefreshToken);
-    }
+    if (!this.checkForbiddenPage(cookieToken)) return;
 
     if (cookieToken && !this._isTokenExpired(cookieToken)) {
       this._setTokens(cookieToken, cookieRefreshToken);
       return;
     }
 
-    if (this.config._debug) {
-      console.log("DEBUG _disable:", this.config._disable);
-    }
-
     if (!this.config._disable) {
       this._auth("login");
     }
+  }
+
+  /**
+   * Checks if the current page is a forbidden page and logs the user out if it is.
+   * @returns True if the page is not forbidden, otherwise false.
+   */
+  private checkForbiddenPage(cookieToken: string): boolean {
+    const location = window.location.href;
+    const baseURL = this._removeTrailingSlash(this.config.baseURL);
+    const url = this._removeTrailingSlash(location.replace(baseURL, ""));
+
+    const isForbiddenPage = url.startsWith("auth_unauthorized");
+    if (!isForbiddenPage) return true;
+
+    if (this._isTokenExpired(cookieToken)) {
+      window.location.href = baseURL;
+      return false;
+    }
+
+    return false;
+  }
+
+  /**
+   * Redirects the user to the forbidden page with the current route.
+   * @param route - The current route to redirect to after login.
+   **/
+  public goToForbidden(route: string) {
+    const baseURL = this._removeTrailingSlash(this.config.baseURL);
+    window.location.href = `${baseURL}/auth_unauthorized?route=${route}`;
   }
 
   /**
@@ -225,7 +240,7 @@ export class AuthService {
       const tokenInfo = {
         timeUntilExpiry: { inMinutes: minutes, inSeconds: secondsUntilExpiry },
         user: {
-          username: decodedToken.username,
+          username: decodedToken.username.toLowerCase(),
           database: decodedToken.database,
         },
       };
@@ -371,7 +386,7 @@ export class AuthService {
     modal.style.cssText = `
     background-color: #15202b;
     color: white;
-    padding: 24px;
+    padding: 2rem 4rem;
     border-radius: 12px;
     text-align: center;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
@@ -572,6 +587,10 @@ export class AuthService {
     } catch (error) {
       console.error("Error removing cookie:", error);
     }
+  }
+
+  private _removeTrailingSlash(url: string) {
+    return url.endsWith("/") ? url.slice(0, -1) : url;
   }
 }
 

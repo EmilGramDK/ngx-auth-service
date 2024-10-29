@@ -31,9 +31,10 @@ npm install @emilgramdk/ngx-auth-service
    import { provideHttpClient } from "@angular/common/http";
 
    const authServiceConfig: AuthServiceConfig = {
-     authURL: "https://example.com/auth", // URL to authenticate
+     authURL: "https://auth.example.com", // URL to authenticate users
+     baseURL: "https://example.com/app", // Base URL for the application
      storageKey: "authToken", // Token cookie name
-     showRenewBeforeFiveMin: true, // Show renew token popup 5 minutes before expiry
+     application: "default", // Application name sent to auth app
    };
 
    export const appConfig: ApplicationConfig = {
