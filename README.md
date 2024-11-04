@@ -35,6 +35,11 @@ npm install @emilgramdk/ngx-auth-service
      baseURL: "https://example.com/app", // Base URL for the application
      storageKey: "authToken", // Token cookie name
      application: "default", // Application name sent to auth app
+     apiSettings: {
+       apiURL: "https://api.example.com",
+       transformKeys: false, // remove first _ from keys in api response
+       retryCount: 0,
+     },
    };
 
    export const appConfig: ApplicationConfig = {
@@ -74,9 +79,7 @@ npm install @emilgramdk/ngx-auth-service
    export class APIService {
      private apiURL = config.apiURL;
 
-     constructor(private requestService: RequestService) {
-       this.requestService.setSettings("https://api.example.com/");
-     }
+     constructor(private requestService: RequestService) {}
 
      public async getAllUsers() {
        const route = "users";

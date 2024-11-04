@@ -7,43 +7,18 @@ import {
 import { firstValueFrom, throwError } from "rxjs";
 import { catchError, retry, map } from "rxjs/operators";
 import { AuthService } from "./auth.service";
-import { AUTH_CONFIG, AuthServiceConfig } from "./config";
+import { ApiSettings, AUTH_CONFIG, AuthServiceConfig } from "./config";
 
 @Injectable({
   providedIn: "root",
 })
 export class RequestService {
-  private apiSettings?: ApiSettings;
-  private token?: string;
-
   constructor(
     @Inject(AUTH_CONFIG) private config: AuthServiceConfig,
     private authService: AuthService,
     private http: HttpClient
   ) {
-    if (this.authService.isForbiddenPage()) return;
-
-    const tokens = this.authService.getTokens();
-    this.token = tokens?.token;
     this._handleError = this._handleError.bind(this);
-  }
-
-  /**
-   * Sets the API settings.
-   * @param apiURL The base URL of the API.
-   * @param transformKeys Whether to remove the first underscore from object keys. Default is `false`.
-   * @param retryCount The number of times to retry the request. Default is `0`.
-   */
-  public setSettings(
-    apiURL: string,
-    transformKeys: boolean = false,
-    retryCount: number = 0
-  ): void {
-    this.apiSettings = {
-      apiURL: apiURL.replace(/\/$/, ""), // Remove trailing slash
-      transformKeys,
-      retryCount,
-    };
   }
 
   /**
@@ -54,7 +29,7 @@ export class RequestService {
    * @param customApiSettings Custom API settings to use for this request.
    * @param replacements An array of word replacements where the key is the word to replace and the value is the replacement word.
    * @returns An observable with the response data.
-   * @throws If the API settings are not set or the user is not logged in.
+   * @throws If the the user is not logged in.
    */
   public async makeRequest<T>(
     method: string,
@@ -63,22 +38,19 @@ export class RequestService {
     customApiSettings?: Partial<ApiSettings>,
     keyReplacements?: { [key: string]: string }
   ) {
-    if (!this.apiSettings && !customApiSettings) {
-      throw new Error(
-        "API settings not set. Call requestService.setSettings() first."
-      );
-    }
+    const tokens = this.authService.getTokens();
+    const apiToken = tokens?.token;
 
-    if (!this.token) {
+    if (!apiToken) {
       throw new Error("No token available. Please log in first.");
     }
 
-    const apiSettings = { ...this.apiSettings, ...customApiSettings };
+    const apiSettings = { ...this.config.apiSettings, ...customApiSettings };
 
     const url = `${apiSettings.apiURL}/${route}`;
     let request;
 
-    const options = { headers: this._getHeaders() };
+    const options = { headers: this._getHeaders(apiToken) };
 
     switch (method) {
       case "GET":
@@ -114,9 +86,9 @@ export class RequestService {
    * Gets the headers to send with the request.
    * @returns The headers to send with the request.
    */
-  private _getHeaders(): HttpHeaders {
+  private _getHeaders(token: string): HttpHeaders {
     return new HttpHeaders({
-      Authorization: `Bearer ${this.token}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     });
   }
@@ -130,16 +102,15 @@ export class RequestService {
     console.error("An error occurred:", error);
 
     if (error.status === 401) {
-      const parsedURL = new URL(error.url || "");
-      const route = parsedURL.pathname.substring(
-        parsedURL.pathname.indexOf("/") + 1
-      );
+      const route =
+        error.url?.replace(this.config.apiSettings?.apiURL, "") || "";
 
-      this.authService.goToForbidden(route);
+      this.authService.goToFobidden(route);
+      return;
     }
 
     return throwError(
-      () => new Error("Something went wrong; please try again later.")
+      () => new Error(`Something went wrong; ${error.message}`)
     );
   }
 
@@ -178,7 +149,7 @@ export class RequestService {
    */
   private _transformKeys(obj: any): any {
     try {
-      if (!this.apiSettings!.transformKeys) {
+      if (!this.config.apiSettings?.transformKeys) {
         return obj;
       }
 
@@ -197,10 +168,4 @@ export class RequestService {
       return obj;
     }
   }
-}
-
-export interface ApiSettings {
-  apiURL: string;
-  transformKeys: boolean;
-  retryCount: number;
 }

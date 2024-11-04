@@ -4,20 +4,34 @@ import { InjectionToken } from "@angular/core";
 export interface AuthServiceConfig {
   authURL: string; // The URL to authenticate users.
   baseURL: string; // The base url for the application.
+  apiSettings: ApiSettings; // API settings.
   database?: string; // The database to authenticate users.
   storageKey?: string; // Key to store the authentication token in local storage.
-  application?: string;
+  application?: string; // Sent to the auth server to identify the application.
+  forbiddenPage?: string; // The page to redirect to when the user is not authorized.
   refreshBeforeExpireInMinutes?: number; // Time in minutes to renew the token before expiration.
   showRenewBeforeTenMin?: boolean; // Flag to show renew warning ten minutes before expiration.
   _disable?: boolean; // Flag to disable auto-login. Used for testing.
+}
+
+export interface ApiSettings {
+  apiURL: string;
+  transformKeys: boolean;
+  retryCount: number;
 }
 
 // Default configuration for the AuthService.
 const defaultAuthServiceConfig: AuthServiceConfig = {
   authURL: "https://auth.example.com",
   baseURL: "https://example.com/app",
+  apiSettings: {
+    apiURL: "https://api.example.com",
+    transformKeys: false,
+    retryCount: 0,
+  },
   storageKey: "authToken",
   application: "default",
+  forbiddenPage: "auth_unauthorized",
   refreshBeforeExpireInMinutes: 30,
   showRenewBeforeTenMin: true,
   _disable: false,
@@ -31,6 +45,14 @@ const defaultAuthServiceConfig: AuthServiceConfig = {
 export function mergeAuthServiceConfig(
   config: Partial<AuthServiceConfig> = {}
 ): AuthServiceConfig {
+  // remove the last slash from the apiURL and baseURL
+  if (config.apiSettings?.apiURL) {
+    config.apiSettings.apiURL = _removeTrailingSlash(config.apiSettings.apiURL);
+  }
+  if (config.baseURL) {
+    config.baseURL = _removeTrailingSlash(config.baseURL);
+  }
+
   return { ...defaultAuthServiceConfig, ...config };
 }
 
@@ -57,3 +79,7 @@ export interface AuthServiceConfiguration {
    */
   config?: AuthServiceConfig;
 }
+
+const _removeTrailingSlash = (url: string) => {
+  return url.endsWith("/") ? url.slice(0, -1) : url;
+};

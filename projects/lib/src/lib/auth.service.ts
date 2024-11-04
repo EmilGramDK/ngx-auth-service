@@ -8,9 +8,10 @@ import { firstValueFrom } from "rxjs";
 })
 export class AuthService {
   public hasToken: boolean = false; // Can be used to check if the user is authenticated
+  public tokenInfo?: TokenInfo;
+  private disableService: boolean = false;
   private token?: string;
   private refreshToken?: string;
-  private tokenInfo?: TokenInfo;
   private refreshTimeoutId: any;
   private tenMinuteTimeoutId: any;
   private redirectTimeoutId: any;
@@ -22,11 +23,16 @@ export class AuthService {
   ) {
     try {
       if (this.config._disable) return; // Disable auto-login for testing
+      this.disableService = this.isForbiddenPage(); // Disable service on forbidden page
 
       this._checkToken();
     } catch (error) {
       console.error("Error initializing AuthService:", error);
     }
+  }
+
+  public isServiceDisabled(): boolean {
+    return this.disableService;
   }
 
   /**
@@ -41,15 +47,6 @@ export class AuthService {
       console.error("Error retrieving token:", error);
       return {};
     }
-  }
-
-  /**
-   * Retrieves the token information, if available.
-   * @returns An object containing time until token expiry and user information.
-   */
-  public getTokenInfo(): TokenInfo | undefined {
-    this._extractInfoFromToken();
-    return this.tokenInfo;
   }
 
   /**
@@ -69,10 +66,8 @@ export class AuthService {
     }
 
     try {
-      const authURL = this._removeTrailingSlash(this.config.authURL);
-
       const response: any = await firstValueFrom(
-        this.http.post(`${authURL}/refresh`, data.toString(), {
+        this.http.post(`${this.config.authURL}/refresh`, data.toString(), {
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
         })
       );
@@ -97,7 +92,7 @@ export class AuthService {
    * Logs the user out by removing the token and redirecting to the logout URL.
    */
   public logout() {
-    this._removeCookies();
+    this._removeTokens();
     this._auth("logout");
   }
 
@@ -119,6 +114,24 @@ export class AuthService {
   }
 
   /**
+   * Redirects the user to the login page if the token is expired or not found.
+   * If the token is valid, redirects to the forbidden page with the current route.
+   * @param route - The API route the user was trying to access.
+   */
+  public goToFobidden(route: string) {
+    if (this._isTokenExpired(this.token!)) {
+      this._auth("login");
+      return;
+    }
+
+    if (this.isForbiddenPage()) return;
+
+    window.location.href = `${this.config.baseURL}/${
+      this.config.forbiddenPage
+    }?route=${encodeURIComponent(route)}`;
+  }
+
+  /**
    * Redirects the user to the login or logout page based on the type.
    */
   private _auth(type: "login" | "logout") {
@@ -127,7 +140,7 @@ export class AuthService {
       : "";
 
     const applicationParam = `&appName=${this.config.application}`;
-    const authURL = this._removeTrailingSlash(this.config.authURL);
+    const authURL = this.config.authURL;
 
     window.location.href =
       authURL +
@@ -142,6 +155,8 @@ export class AuthService {
    * If the token is invalid or not found, redirects to the login page.
    */
   private _checkToken() {
+    if (this.isServiceDisabled()) return;
+
     const params = new URLSearchParams(window.location.search);
     const tokenFromURL = params.get("token");
     const refreshTokenFromURL = params.get("refresh_token") || "";
@@ -160,49 +175,21 @@ export class AuthService {
     const cookieToken = cookieTokens.token;
     const cookieRefreshToken = cookieTokens.refreshToken;
 
-    if (!this.checkForbiddenPage(cookieToken)) return;
-
     if (cookieToken && !this._isTokenExpired(cookieToken)) {
       this._setTokens(cookieToken, cookieRefreshToken);
       return;
     }
 
-    if (!this.config._disable) {
-      this._auth("login");
-    }
+    this._auth("login");
   }
 
   /**
-   * Checks if the current page is a forbidden page and logs the user out if it is.
-   * @returns True if the page is not forbidden, otherwise false.
+   * Checks if the current page is the forbidden page.
+   * @returns True if the page is the forbidden page, otherwise false.
    */
-  private checkForbiddenPage(cookieToken: string): boolean {
-    if (!this.isForbiddenPage()) return true;
-
-    if (this._isTokenExpired(cookieToken)) {
-      const baseURL = this._removeTrailingSlash(this.config.baseURL);
-      window.location.href = baseURL;
-      return false;
-    }
-
-    return false;
-  }
-
   public isForbiddenPage(): boolean {
     const location = window.location.href;
-    return location.includes("auth_unauthorized");
-  }
-
-  /**
-   * Redirects the user to the forbidden page with the current route.
-   * @param route - The current route to redirect to after login.
-   **/
-  public goToForbidden(route: string) {
-    if (this.isForbiddenPage()) return;
-    const baseURL = this._removeTrailingSlash(this.config.baseURL);
-    window.location.href = `${baseURL}/auth_unauthorized?route=${encodeURIComponent(
-      route
-    )}`;
+    return location.includes(this.config.forbiddenPage || "auth_unauthorized");
   }
 
   /**
@@ -213,12 +200,12 @@ export class AuthService {
   private _setTokens(token: string, refreshToken?: string): boolean {
     try {
       this.token = token;
+      this.hasToken = true;
 
       if (refreshToken) {
         this.refreshToken = refreshToken;
       }
 
-      this.hasToken = true;
       this._extractInfoFromToken();
       this._scheduleExpiration();
       return true;
@@ -252,7 +239,6 @@ export class AuthService {
       this.tokenInfo = tokenInfo;
     } catch (error) {
       console.error("Error extracting token info:", error);
-      throw new Error("Error extracting token info");
     }
   }
 
@@ -576,6 +562,13 @@ export class AuthService {
     this._removeCookie(this.config.storageKey + "_refresh");
   }
 
+  private _removeTokens() {
+    this.token = undefined;
+    this.refreshToken = undefined;
+    this.hasToken = false;
+    this._removeCookies();
+  }
+
   private _removeCookies() {
     try {
       this._removeCookie(this.config.storageKey!);
@@ -591,10 +584,6 @@ export class AuthService {
     } catch (error) {
       console.error("Error removing cookie:", error);
     }
-  }
-
-  private _removeTrailingSlash(url: string) {
-    return url.endsWith("/") ? url.slice(0, -1) : url;
   }
 }
 

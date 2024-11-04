@@ -1,5 +1,5 @@
-import { NgModule, type ModuleWithProviders } from '@angular/core';
-import { AUTH_CONFIG, AuthServiceConfiguration } from './config';
+import { NgModule, type ModuleWithProviders } from "@angular/core";
+import { AUTH_CONFIG, AuthServiceConfiguration } from "./config";
 
 /**
  * This module is only here for backward compatibility, **do not add it by yourself**
