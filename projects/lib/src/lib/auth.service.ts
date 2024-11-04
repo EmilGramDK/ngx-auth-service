@@ -119,12 +119,15 @@ export class AuthService {
    * @param route - The API route the user was trying to access.
    */
   public goToFobidden(route: string) {
+    if (this.isForbiddenPage()) return;
+
     if (this._isTokenExpired(this.token!)) {
       this._auth("login");
       return;
     }
 
-    if (this.isForbiddenPage()) return;
+    // Remove saved tokens
+    this._removeTokens();
 
     window.location.href = `${this.config.baseURL}/${
       this.config.forbiddenPage
