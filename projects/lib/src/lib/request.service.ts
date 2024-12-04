@@ -77,7 +77,10 @@ export class RequestService {
         map((response) => this._transformKeys(response)),
         map((response) => this._replaceKeys(response, keyReplacements)),
         retry(apiSettings.retryCount || 0),
-        catchError(this._handleError)
+        catchError((error) => {
+          this._handleError(error);
+          return throwError(() => error); // Re-emit the error
+        })
       )
     );
   }
@@ -101,17 +104,13 @@ export class RequestService {
   private async _handleError(error: HttpErrorResponse) {
     console.error("An error occurred:", error);
 
-    if (error.status === 401) {
-      const route =
-        error.url?.replace(this.config.apiSettings?.apiURL, "") || "";
+    throw error;
 
-      this.authService.goToFobidden(route);
-      return;
-    }
-
+    /* not throwing error back to application
     return throwError(
       () => new Error(`Something went wrong; ${error.message}`)
     );
+    */
   }
 
   /**
