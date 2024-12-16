@@ -28,6 +28,7 @@ export class RequestService {
    * @param data The data to send with the request.
    * @param customApiSettings Custom API settings to use for this request.
    * @param replacements An array of word replacements where the key is the word to replace and the value is the replacement word.
+   * @param disableCache Whether to disable the cache for this request.
    * @returns An observable with the response data.
    * @throws If the the user is not logged in.
    */
@@ -36,7 +37,8 @@ export class RequestService {
     route: string,
     data?: any,
     customApiSettings?: Partial<ApiSettings>,
-    keyReplacements?: { [key: string]: string }
+    keyReplacements?: { [key: string]: string },
+    disableCache?: boolean
   ) {
     const tokens = this.authService.getTokens();
     const apiToken = tokens?.token;
@@ -50,7 +52,7 @@ export class RequestService {
     const url = `${apiSettings.apiURL}/${route}`;
     let request;
 
-    const options = { headers: this._getHeaders(apiToken) };
+    const options = { headers: this._getHeaders(apiToken, disableCache) };
 
     switch (method) {
       case "GET":
@@ -89,10 +91,16 @@ export class RequestService {
    * Gets the headers to send with the request.
    * @returns The headers to send with the request.
    */
-  private _getHeaders(token: string): HttpHeaders {
+  private _getHeaders(
+    token: string,
+    disableCache: boolean = false
+  ): HttpHeaders {
     return new HttpHeaders({
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
+      "Cache-Control": disableCache
+        ? "no-cache, no-store, must-revalidate"
+        : "",
     });
   }
 
