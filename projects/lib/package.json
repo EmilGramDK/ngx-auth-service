@@ -1,6 +1,6 @@
 {
   "name": "@emilgramdk/ngx-auth-service",
-  "version": "1.0.27",
+  "version": "1.0.29",
   "funding": {
     "type": "github",
     "url": "https://github.com/sponsors/emilgramdk"
@@ -17,12 +17,12 @@
     "url": "https://github.com/emilgramdk/ngx-auth-service/issues"
   },
   "peerDependencies": {
-    "@angular/common": "^18.0.0",
-    "@angular/core": "^18.0.0",
-    "rxjs": "~7.8.0"
+    "@angular/common": ">=18.0.0 <20.0.0",
+    "@angular/core": ">=18.0.0 <20.0.0",
+    "rxjs": "~7.8.2"
   },
   "dependencies": {
-    "tslib": "^2.5.0"
+    "tslib": "^2.8.1"
   },
   "sideEffects": false
 }
